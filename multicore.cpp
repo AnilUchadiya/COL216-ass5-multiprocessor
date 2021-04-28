@@ -151,7 +151,7 @@ bool empty(std::ifstream &pFile)
 /*****************************************************************************including ass4 functions from header file ******************************/
 
 
-int get_address_value(string s)
+int get_address_value(string s,struct multicore_registers reg)
 {
 	string offset = "";
 	for (int i = 0; i < s.length(); i++)
@@ -180,11 +180,11 @@ int get_address_value(string s)
 	int ans;
 	if (s[offset.length() + 2] == 's')
 	{
-		ans = s_registers[stol(addr)];
+		ans = reg.s_registers[stol(addr)];
 	}
 	else
 	{
-		ans = t_registers[stol(addr)];
+		ans = reg.t_registers[stol(addr)];
 	}
 	ans += stol(offset);
 	return ans;
@@ -242,10 +242,10 @@ int time_taken_for_the_printing_of_queue()
 	return t;
 }
 
-string print_the_queue(int cpi)
+string print_the_queue(struct multicore_registers reg)
 {
 	string answer = "";
-	int cpi_number = cpi;
+	int cpi_number = reg.cpi;
 	int bla = 0;
 	while (dram_queue.size() != 0)
 	{
@@ -269,7 +269,7 @@ string print_the_queue(int cpi)
 
 			if (dram_queue[0].register_name[1] == 's')
 				{
-					dram[dram_queue[0].row_address][dram_queue[0].col_address] = s_registers[stol(dram_queue[0].register_name.substr(2))];
+					dram[dram_queue[0].row_address][dram_queue[0].col_address] = reg.s_registers[stol(dram_queue[0].register_name.substr(2))];
 				}
 				else
 				{
@@ -315,7 +315,7 @@ string print_the_queue(int cpi)
 			cpi_number += time;
 			if (dram_queue[0].register_name[1] == 's')
 			{
-				answer += "clock cycle " + to_string(cpi_number - time + 1) + "-" + to_string(cpi_number) + "; " + dram_queue[0].whole_line + "; memory address " + to_string(dram_queue[0].address) + "-" + to_string(dram_queue[0].address + 3) + "= " + to_string(s_registers[stol(dram_queue[0].register_name.substr(2))]) + row_update_info + "\n";
+				answer += "clock cycle " + to_string(cpi_number - time + 1) + "-" + to_string(cpi_number) + "; " + dram_queue[0].whole_line + "; memory address " + to_string(dram_queue[0].address) + "-" + to_string(dram_queue[0].address + 3) + "= " + to_string(reg.s_registers[stol(dram_queue[0].register_name.substr(2))]) + row_update_info + "\n";
 			}
 			else
 			{
@@ -326,7 +326,7 @@ string print_the_queue(int cpi)
 		{
 			if (dram_queue[0].register_name[1] == 's')
 			{
-				s_registers[stol(dram_queue[0].register_name.substr(2))] = dram[dram_queue[0].row_address][dram_queue[0].col_address];
+				reg.s_registers[stol(dram_queue[0].register_name.substr(2))] = dram[dram_queue[0].row_address][dram_queue[0].col_address];
 			}
 			else
 			{
@@ -371,7 +371,7 @@ string print_the_queue(int cpi)
 			cpi_number += time;
 			if (dram_queue[0].register_name[1] == 's')
 			{
-				answer += "clock cycle " + to_string(cpi_number - time + 1) + "-" + to_string(cpi_number) + "; " + dram_queue[0].whole_line + "; $s" + (dram_queue[0].register_name.substr(2)) + "=" + to_string(s_registers[stol(dram_queue[0].register_name.substr(2))]) + row_update_info + "\n";
+				answer += "clock cycle " + to_string(cpi_number - time + 1) + "-" + to_string(cpi_number) + "; " + dram_queue[0].whole_line + "; $s" + (dram_queue[0].register_name.substr(2)) + "=" + to_string(reg.s_registers[stol(dram_queue[0].register_name.substr(2))]) + row_update_info + "\n";
 			}
 			else
 			{
@@ -380,7 +380,7 @@ string print_the_queue(int cpi)
 		}
 		dram_queue.erase(dram_queue.begin());
 	}
-	cpi = cpi_number;
+	reg.cpi = cpi_number;
 	return answer;
 }
 
@@ -619,7 +619,7 @@ int main(int argc, char **argv)
 
 					// cout<<stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1])<<endl;
 					int time = 0;
-					int address = get_address_value(assembly_program_storage[multi_reg[core_no].PC].arguements[1]);
+					int address = get_address_value(assembly_program_storage[multi_reg[core_no].PC].arguements[1],multi_reg[core_no]);
 					if ((address % 4) != 0)
 					{
 						cout << "ERROR: Invalid memory location " << address << ", give multiples of 4" << endl;
@@ -657,7 +657,7 @@ int main(int argc, char **argv)
 				{
 
 					int time = 0;
-					int address = get_address_value(assembly_program_storage[multi_reg[core_no].PC].arguements[1]);
+					int address = get_address_value(assembly_program_storage[multi_reg[core_no].PC].arguements[1],multi_reg[core_no]);
 					if ((address % 4) != 0)
 					{
 						cout << "ERROR: Invalid memory location " << address << ", give multiples of 4" << endl;
@@ -728,7 +728,7 @@ int main(int argc, char **argv)
 							dram_queue = reschedule(dram_queue);
 						}
 						cout << "executing the queue" << endl;
-						string a = print_the_queue(multi_reg[core_no].cpi);
+						string a = print_the_queue(multi_reg[core_no]);
 						cout << a;
 						execute_the_queue_rn = false;
 						grant = 0;
@@ -819,7 +819,7 @@ int main(int argc, char **argv)
 							dram_queue = reschedule(dram_queue);
 						}
 						cout << "executing the queue" << endl;
-						string a = print_the_queue(multi_reg[core_no].cpi);
+						string a = print_the_queue(multi_reg[core_no]);
 						cout << a;
 						execute_the_queue_rn = false;
 					}
@@ -975,7 +975,7 @@ int main(int argc, char **argv)
 							dram_queue = reschedule(dram_queue);
 						}
 						cout << "executing the queue" << endl;
-						string a = print_the_queue(multi_reg[core_no].cpi);
+						string a = print_the_queue(multi_reg[core_no]);
 						cout << a;
 						execute_the_queue_rn = false;
 					}
@@ -1131,7 +1131,7 @@ int main(int argc, char **argv)
 							dram_queue = reschedule(dram_queue);
 						}
 						cout << "executing the queue" << endl;
-						string a = print_the_queue(multi_reg[core_no].cpi);
+						string a = print_the_queue(multi_reg[core_no]);
 						cout << a;
 						execute_the_queue_rn = false;
 					}
@@ -1282,7 +1282,7 @@ int main(int argc, char **argv)
 							dram_queue = reschedule(dram_queue);
 						}
 						cout << "executing the queue" << endl;
-						string a = print_the_queue(multi_reg[core_no].cpi);
+						string a = print_the_queue(multi_reg[core_no]);
 						cout << a;
 						execute_the_queue_rn = false;
 					}
@@ -1422,7 +1422,7 @@ int main(int argc, char **argv)
 							dram_queue = reschedule(dram_queue);
 						}
 						cout << "executing the queue" << endl;
-						string a = print_the_queue(multi_reg[core_no].cpi);
+						string a = print_the_queue(multi_reg[core_no]);
 						cout << a;
 						execute_the_queue_rn = false;
 					}
@@ -1566,7 +1566,7 @@ int main(int argc, char **argv)
 							dram_queue = reschedule(dram_queue);
 						}
 						cout << "executing the queue" << endl;
-						string a = print_the_queue(multi_reg[core_no].cpi);
+						string a = print_the_queue(multi_reg[core_no]);
 						cout << a;
 						execute_the_queue_rn = false;
 					}
@@ -1807,7 +1807,7 @@ int main(int argc, char **argv)
 							dram_queue = reschedule(dram_queue);
 						}
 						cout << "executing the queue" << endl;
-						string a = print_the_queue(multi_reg[core_no].cpi);
+						string a = print_the_queue(multi_reg[core_no]);
 						cout << a;
 						execute_the_queue_rn = false;
 					}
@@ -1859,7 +1859,7 @@ int main(int argc, char **argv)
 			dram_queue = reschedule(dram_queue);
 		}
 		cout << "executing the queue" << endl;
-		string a = print_the_queue(multi_reg[core_no].cpi);
+		string a = print_the_queue(multi_reg[core_no]);
 		cout << a;
 	}
 
