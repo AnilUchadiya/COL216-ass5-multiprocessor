@@ -1,0 +1,18 @@
+main:
+
+	addi $s0, $zero, 1000
+	addi $s1, $zero, 0
+	addi $t6, $zero, 13
+	sw $t6, 12($s0)
+	lw $t7, 12($s0)
+	addi $s2, $zero, 10
+	addi $t1, $zero, 0
+	add $t6 , $t1, $s2
+	j lol
+	addi $t3, $zero , 12
+
+lol:
+	 addi $s1, $zero, 0
+	addi $s2, $zero, 10
+
+exit:

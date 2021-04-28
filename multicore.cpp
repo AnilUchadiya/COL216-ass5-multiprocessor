@@ -16,6 +16,14 @@ int MAX_CYCLES;
 
 int grant = 0;
 
+
+struct lines
+{
+	string instruction;
+	vector<string> arguements;
+	string whole_line;
+};
+
 struct multicore_registers{
 	int coreno;
     int line_nu = 0;
@@ -27,6 +35,7 @@ struct multicore_registers{
     vector<int> line_countt;
     map<string, int> countt;
 	vector<lines> assembly_program_storage;
+	
 };
 
 
@@ -56,12 +65,7 @@ int num_of_row_buff_updates = 0;
 vector<int> row_addresses;
 vector<int> col_addresses;
 
-struct lines
-{
-	string instruction;
-	vector<string> arguements;
-	string whole_line;
-};
+
 
 struct dram_requests
 {
@@ -78,13 +82,13 @@ vector<dram_requests> dram_queue;
 
 bool execute_the_queue_rn = false;
 
-vector<lines> assembly_program_storage;
+// vector<lines> assembly_program_storage;
 
-bool split_inst(string line, unordered_map<string, int> ins_check,struct multicore_registers reg)
+bool split_inst(string line, unordered_map<string, int> ins_check,multicore_registers &reg)
 {
 	boost::trim_left(line);
 	boost::trim_right(line);
-
+	
 	vector<string> arg;
 	string ar1 = "";
 	bool flag = true;
@@ -94,14 +98,14 @@ bool split_inst(string line, unordered_map<string, int> ins_check,struct multico
 	{
 		label_map[line] = reg.line_nu;
 		l.instruction = line;
-		assembly_program_storage.push_back(l);
+		reg.assembly_program_storage.push_back(l);
 		return true;
 	}
 	vector<string> argss;
 	if (line == "\n" || line == "\0")
 	{
 		l.instruction = "";
-		assembly_program_storage.push_back(l);
+		reg.assembly_program_storage.push_back(l);
 		return true;
 	}
 	for (int i = 0; i < line.length(); i++)
@@ -123,6 +127,7 @@ bool split_inst(string line, unordered_map<string, int> ins_check,struct multico
 	}
 	arg.push_back(ar1);
 	l.arguements = arg;
+
 	if (ins_check.find(l.instruction) == ins_check.end())
 	{
 		std::cout << "Invalid Instruction at line : " << reg.line_nu<< "AND at core : "<<reg.coreno << '\n';
@@ -139,7 +144,11 @@ bool split_inst(string line, unordered_map<string, int> ins_check,struct multico
 		cout<<"Error : $zero register is immutable -> "<<line<<endl;
 		return false;
 	}
-	assembly_program_storage.push_back(l);
+	// if(l.instruction == "lw" || l.instruction == "sw"){
+
+	// }
+	reg.assembly_program_storage.push_back(l);
+
 	return true;
 	// return arg;
 }
@@ -154,6 +163,8 @@ bool empty(std::ifstream &pFile)
 
 int get_address_value(string s,struct multicore_registers reg)
 {
+	int memory_offset = reg.coreno * 1024 *1024*1.0/NUM_CORES*1.0;
+
 	string offset = "";
 	for (int i = 0; i < s.length(); i++)
 	{
@@ -188,7 +199,7 @@ int get_address_value(string s,struct multicore_registers reg)
 		ans = reg.t_registers[stol(addr)];
 	}
 	ans += stol(offset);
-	return ans;
+	return ans + memory_offset;
 }
 
 int time_taken_for_the_printing_of_queue()
@@ -425,26 +436,26 @@ vector<dram_requests> reschedule(vector<dram_requests> drams)
 	{
 		for (int i = 0; i < qs; i++)
 		{
-			for (int j = i + 1; j < qs; j++)
-			{
-				if (rs[j].inst == rs[i].inst && rs[j].address == rs[i].address && rs[j].register_name == rs[i].register_name && rs[i].inst != "-")
-				{
-					cout << "ignored duplicate instruction : " << rs[j].whole_line << endl;
-					ignored_instructions++;
-					rs[j].inst = "-";
-                }
-				else if (rs[j].inst == rs[i].inst && rs[j].address == rs[i].address && rs[j].inst == "sw" && abs(i-j)==1)
-				{
-					cout << "ignored  instruction : " << rs[i].whole_line << endl;
-					rs[i].inst = "-";
-				}
-				else if (rs[j].inst == rs[i].inst && rs[j].register_name == rs[i].register_name && rs[j].inst == "lw" && abs(i-j)==1)
-				{
-					cout << "ignored  instruction : " << rs[i].whole_line << endl;
-					rs[i].inst = "-";
-				}
+			// for (int j = i + 1; j < qs; j++)
+			// {
+			// 	if (rs[j].inst == rs[i].inst && rs[j].address == rs[i].address && rs[j].register_name == rs[i].register_name && rs[i].inst != "-")
+			// 	{
+			// 		cout << "ignored duplicate instruction : " << rs[j].whole_line << endl;
+			// 		ignored_instructions++;
+			// 		rs[j].inst = "-";
+            //     }
+			// 	else if (rs[j].inst == rs[i].inst && rs[j].address == rs[i].address && rs[j].inst == "sw" && abs(i-j)==1)
+			// 	{
+			// 		cout << "ignored  instruction : " << rs[i].whole_line << endl;
+			// 		rs[i].inst = "-";
+			// 	}
+			// 	else if (rs[j].inst == rs[i].inst && rs[j].register_name == rs[i].register_name && rs[j].inst == "lw" && abs(i-j)==1)
+			// 	{
+			// 		cout << "ignored  instruction : " << rs[i].whole_line << endl;
+			// 		rs[i].inst = "-";
+			// 	}
 				
-			}
+			// }
 			if (rs[i].inst != "-")
 				ans.push_back(rs[i]);
 		}
@@ -469,32 +480,36 @@ vector<string> globVector(const string& pattern){
 bool multicore_finish(struct multicore_registers multi_reg[]){
 	bool ret = true;
 	for(int i =0;i<NUM_CORES;i++){
-		if(multi_reg[i].assembly_program_storage[multi_reg[i].PC].instruction != "exit:")
-		{
-			multi_reg[i].exit = true;
-		}
-		else{
-			ret = false;
-		}
+		ret = ret && multi_reg[i].exit;
+		// if(multi_reg[i].assembly_program_storage[multi_reg[i].PC].instruction != "exit:")
+		// {
+		// 	multi_reg[i].exit = true;
+		// }
+		// else{
+		// 	ret = false;
+		// }
 	}
 	return ret;
 }
 int main(int argc, char **argv)
 {
-
-
     string path = argv[3];
+	cout<<path<<endl;
     NUM_CORES = stoi(argv[1]);
+	cout<<"num of cores  = "<<NUM_CORES<<endl;
     MAX_CYCLES = stoi(argv[2]);
     vector<string> files  = globVector(path);
 	struct multicore_registers multi_reg[NUM_CORES];
     for(auto i : files){
+		cout<<"file = ";
         cout<<i<<endl;
     }
+	cout<<"here"<<argv[4]<<" - --"<<argv[5]<<endl;
 	ROW_ACCESS_DELAY = stoi(argv[4]);
 	COL_ACCESS_DELAY = stoi(argv[5]);
+	cout<<"here ------------- "<<endl;
 	bool reorder = false;
-	if (argc == 5)
+	if (argc >= 4)
 	{
 		reorder = true;
 	}
@@ -514,31 +529,39 @@ int main(int argc, char **argv)
 
 	/*************************************************************multi core program reading start***************************************/
 	for(int core_no =0;core_no<NUM_CORES;core_no++){
+		cout<<"here ------2------- "<<endl;
+		multi_reg[core_no].coreno = core_no;
 		for (int i = 0; i < 8; i++)
 		{
+			// cout<<"here ------22------- "<<endl;
 			multi_reg[core_no].s_registers.push_back((int32_t)0);
 		}
 		for (int i = 0; i < 10; i++)
 		{
+			// cout<<"here ------22------- "<<endl;
 			multi_reg[core_no].t_registers.push_back((int32_t)0);
 		}
+		multi_reg[core_no].assembly_program_storage.clear();
 		string myText;
 		ifstream MyReadFile(files[core_no]);
-
+		// cout<<"here ------22------- "<<endl;
 		if (!MyReadFile)
 		{
 			cerr << "Error File not found : " << argv[1] << '\n';
 			return 0;
 		}
+		cout<<"here ------22------- "<<endl;
 		if (empty(MyReadFile))
 		{
 			cerr << "Error Empty file" << '\n';
 			return 0;
 		}
+		// cout<<"here ------22------- "<<endl;
 		/* code */
 		bool error = false;
 		while (getline(MyReadFile, myText))
 		{
+			cout<<"here ------22------- "<<myText<<endl;
 
 			// if(myText=="\0" || myText == "\n") continue;
 			multi_reg[core_no].line_nu++;
@@ -547,18 +570,21 @@ int main(int argc, char **argv)
 				error = true;
 			}
 		}
+		// cout<<"here ------22------- "<<endl;
 		MyReadFile.close();
+		// cout<<"here ------22------- "<<endl;
 		if (error)
 		{
 			cout << "Invalid Format Please use proper formatted file" << endl;
 			return 0;
 		}
-
+	cout<<"here ------22------- "<<multi_reg[core_no].assembly_program_storage.size() - 1<<endl;
 		for (int i = 0; i < multi_reg[core_no].assembly_program_storage.size() - 1; i++)
 		{
+			// cout<<"here ------222222------- "<<endl;
 			multi_reg[core_no].line_countt.push_back(0);
 		}
-		MyReadFile.close();
+		// MyReadFile.close();
 	}
 	// for (int i = 0; i < 8; i++)
 	// {
@@ -597,30 +623,43 @@ int main(int argc, char **argv)
 	// }
 	int lno[NUM_CORES] = {0};
 	int core_no =0;
+	cout<<"here --------3----- "<<endl;
 	try
 	{
 		/* code */
 		
-		while (multicore_finish(multi_reg))
+		while (!multicore_finish(multi_reg))
 		{
+			cout<<"infinte"<<endl;
 			/***********************************************multi core program execution**********************************************************************************/
 			for(core_no=0;core_no < NUM_CORES;core_no++)
-			{
-				multi_reg[core_no].countt[assembly_program_storage[multi_reg[core_no].PC].instruction]++;
+			{	
+				if(multi_reg[core_no].cpi == MAX_CYCLES){
+					multi_reg[core_no].exit = true;
+				}
+				if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "exit:"){
+					multi_reg[core_no].exit = true;
+					cout<<"Core : "<<core_no<<" Ended execution"<<endl;
+				}
+				if(multi_reg[core_no].exit){
+					continue;
+				}
+
+				multi_reg[core_no].countt[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction]++;
 				lno[core_no]++;
 				multi_reg[core_no].line_countt[multi_reg[core_no].PC]++;
 				// cout<<assembly_program_storage[multi_reg[core_no].PC].instruction<<" "<<assembly_program_storage[multi_reg[core_no].PC].arguements[0]<<'\n';
-				if (assembly_program_storage[multi_reg[core_no].PC].instruction == "")
+				if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "")
 				{
 					multi_reg[core_no].PC++;
 					continue;
 				}
-				if (assembly_program_storage[multi_reg[core_no].PC].instruction == "lw")
+				if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "lw")
 				{
 
 					// cout<<stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1])<<endl;
 					int time = 0;
-					int address = get_address_value(assembly_program_storage[multi_reg[core_no].PC].arguements[1],multi_reg[core_no]);
+					int address = get_address_value(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1],multi_reg[core_no]);
 					if ((address % 4) != 0)
 					{
 						cout << "ERROR: Invalid memory location " << address << ", give multiples of 4" << endl;
@@ -638,27 +677,27 @@ int main(int argc, char **argv)
 					
 
 					multi_reg[core_no].cpi++;
-					cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; DRAM request issued" << endl;
+					cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; DRAM request issued" << endl;
 
 
 					struct dram_requests dr;
 					dr.inst = "lw";
-					dr.register_name = assembly_program_storage[multi_reg[core_no].PC].arguements[0];
+					dr.register_name = multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0];
 					dr.address = address;
 					dr.row_address = row_address;
 					dr.col_address = col_address;
 					dr.dram_request_cpi = multi_reg[core_no].cpi;
-					dr.whole_line = assembly_program_storage[multi_reg[core_no].PC].whole_line;
+					dr.whole_line = multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line;
 
 					dram_queue.push_back(dr);
 
 					multi_reg[core_no].PC++;
 				}
-				else if (assembly_program_storage[multi_reg[core_no].PC].instruction == "sw")
+				else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "sw")
 				{
 
 					int time = 0;
-					int address = get_address_value(assembly_program_storage[multi_reg[core_no].PC].arguements[1],multi_reg[core_no]);
+					int address = get_address_value(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1],multi_reg[core_no]);
 					if ((address % 4) != 0)
 					{
 						cout << "ERROR: Invalid memory location " << address << ", give multiples of 4" << endl;
@@ -678,36 +717,36 @@ int main(int argc, char **argv)
 					row_addresses.push_back(row_address);
 					col_addresses.push_back(col_address);
 					multi_reg[core_no].cpi++;
-					cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; DRAM request issued" << endl;
+					cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; DRAM request issued" << endl;
 
 					struct dram_requests dr;
 					dr.inst = "sw";
-					dr.register_name = assembly_program_storage[multi_reg[core_no].PC].arguements[0];
+					dr.register_name = multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0];
 					dr.address = address;
 					dr.row_address = row_address;
 					dr.col_address = col_address;
 					dr.dram_request_cpi = multi_reg[core_no].cpi;
-					dr.whole_line = assembly_program_storage[multi_reg[core_no].PC].whole_line;
+					dr.whole_line = multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line;
 
 					dram_queue.push_back(dr);
 
 
 					multi_reg[core_no].PC++;
 				}
-				else if (assembly_program_storage[multi_reg[core_no].PC].instruction == "addi")
+				else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "addi")
 				{
 
 					for (int i = 0; i < dram_queue.size(); i++)
 					{
-						if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[0])
+						if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[1])
+						else if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[2])
+						else if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])
 						{
 							execute_the_queue_rn = true;
 						}
@@ -740,65 +779,65 @@ int main(int argc, char **argv)
 						grant++;
 					}
 
-					if (assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
+					if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
 					{
 						multi_reg[core_no].cpi++;
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's')
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's')
 						{
-							multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
-							cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
+							cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 						}
-						else if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't')
+						else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't')
 						{
-							multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
-							cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
+							cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 						}
 					}
 					else
 					{
 						multi_reg[core_no].cpi++;
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's')
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't')
+						else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2]);
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
 					}
 					multi_reg[core_no].PC++;
 				}
-				else if (assembly_program_storage[multi_reg[core_no].PC].instruction == "add")
+				else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "add")
 				{
 					for (int i = 0; i < dram_queue.size(); i++)
 					{
-						if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[0])
+						if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[1])
+						else if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[2])
+						else if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])
 						{
 							execute_the_queue_rn = true;
 						}
@@ -831,130 +870,130 @@ int main(int argc, char **argv)
 					}
 
 					multi_reg[core_no].cpi++;
-					if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's')
+					if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's')
 					{
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
+						else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
 					}
-					else if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't')
+					else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't')
 					{
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
+						else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] + multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
 					}
 					multi_reg[core_no].PC++;
 				}
 
-				else if (assembly_program_storage[multi_reg[core_no].PC].instruction == "sub")
+				else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "sub")
 				{
 					for (int i = 0; i < dram_queue.size(); i++)
 					{
-						if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[0])
+						if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[1])
+						else if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[2])
+						else if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])
 						{
 							execute_the_queue_rn = true;
 						}
@@ -987,130 +1026,130 @@ int main(int argc, char **argv)
 					}
 
 					multi_reg[core_no].cpi++;
-					if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's')
+					if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's')
 					{
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
+						else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = (-1) * multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = (-1) * multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = (-1) * multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = (-1) * multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
 					}
-					else if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't')
+					else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't')
 					{
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
+						else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] - multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = (-1) * multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = (-1) * multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = (-1) * multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = (-1) * multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
 					}
 					multi_reg[core_no].PC++;
 				}
 
-				else if (assembly_program_storage[multi_reg[core_no].PC].instruction == "mul")
+				else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "mul")
 				{
 					for (int i = 0; i < dram_queue.size(); i++)
 					{
-						if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[0])
+						if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[1])
+						else if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[2])
+						else if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])
 						{
 							execute_the_queue_rn = true;
 						}
@@ -1143,125 +1182,125 @@ int main(int argc, char **argv)
 					}
 
 					multi_reg[core_no].cpi++;
-					if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's')
+					if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's')
 					{
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
+						else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
 					}
-					else if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't')
+					else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't')
 					{
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
+						else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't')
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] * multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))];
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero")
 						{
-							if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
+							if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
+							else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't')
 							{
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
-							else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-								multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
-								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+							else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+								multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0 ;
+								cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 							}
 						}
 					}
 					multi_reg[core_no].PC++;
 				}
 
-				else if(assembly_program_storage[multi_reg[core_no].PC].instruction == "beq"){
+				else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "beq"){
 					for (int i = 0; i < dram_queue.size(); i++)
 					{
-						if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[0])
+						if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[1])
+						else if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1])
 						{
 							execute_the_queue_rn = true;
 						}
@@ -1294,99 +1333,99 @@ int main(int argc, char **argv)
 					}
 
 					multi_reg[core_no].cpi++;
-					if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
-							if (multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+					if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
+							if (multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
-							if (multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
+							if (multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
-							if (multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == 0){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
+							if (multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == 0){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
 					}
-					else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
-							if (multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+					else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
+							if (multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
-							if (multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
+							if (multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
-							if (multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == 0){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
+							if (multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] == 0){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
 
 					}
-					else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0] == "$zero"){
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
-							if (0 == multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+					else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0] == "$zero"){
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
+							if (0 == multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
-							if (0 == multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
+							if (0 == multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
 							if (0 == 0){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is not equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
@@ -1394,14 +1433,14 @@ int main(int argc, char **argv)
 				}
 
 
-				else if(assembly_program_storage[multi_reg[core_no].PC].instruction == "bne"){
+				else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "bne"){
 					for (int i = 0; i < dram_queue.size(); i++)
 					{
-						if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[0])
+						if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[1])
+						else if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1])
 						{
 							execute_the_queue_rn = true;
 						}
@@ -1434,99 +1473,99 @@ int main(int argc, char **argv)
 					}
 
 					multi_reg[core_no].cpi++;
-					if (assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
-							if (multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+					if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
+							if (multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
-							if (multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
+							if (multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
-							if (multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != 0){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
+							if (multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != 0){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
 					}
-					else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
-							if (multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+					else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
+							if (multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
-							if (multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
+							if (multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
-							if (multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != 0){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
+							if (multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] != 0){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
 
 					}
-					else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0] == "$zero"){
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
-							if (0 != multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+					else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0] == "$zero"){
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
+							if (0 != multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
-							if (0 != multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
+							if (0 != multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))]){
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
 							if (0 != 0){
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
-								multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<";value of 1st register is not equal to value of 2nd register, hence jumping to label "<<(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2])<<endl ;
+								multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] + ":"];
 							}
 							else{
-								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
+								cout << "clock cycle = "<< multi_reg[core_no].cpi<<"; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line <<"; value of 1st register is equal to value of 2nd register"<<endl ;
 								multi_reg[core_no].PC++;
 							}
 						}
@@ -1535,18 +1574,18 @@ int main(int argc, char **argv)
 
 
 
-				else if (assembly_program_storage[multi_reg[core_no].PC].instruction == "slt"){
+				else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "slt"){
 					for (int i = 0; i < dram_queue.size(); i++)
 					{
-						if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[0])
+						if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if (dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[1])
+						else if (dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1])
 						{
 							execute_the_queue_rn = true;
 						}
-						else if(dram_queue[i].register_name == (string)assembly_program_storage[multi_reg[core_no].PC].arguements[2]){
+						else if(dram_queue[i].register_name == (string)multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2]){
 							execute_the_queue_rn = true;
 						}
 					}
@@ -1579,206 +1618,206 @@ int main(int argc, char **argv)
 
 					multi_reg[core_no].cpi++;
 
-					if (assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's'){
-							if (multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+					if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 's'){
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's'){
+							if (multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
 							}
 							else{
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't'){
-							if (multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't'){
+							if (multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
 							}
 							else{
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-							if (multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < 0){
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+							if (multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < 0){
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-							}
-							else{
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-							}
-						}
-					}
-					else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's'){
-							if (multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
 							}
 							else{
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-							}
-						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't'){
-							if (multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-							}
-							else{
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-							}
-						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
-							if (multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < 0){
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-							}
-							else{
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
 							}
 						}
 					}
-					else if(assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
-						if (assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's'){
-							if (0 < multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+					else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1][1] == 't'){
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's'){
+							if (multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-							}
-							else{
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-							}
-						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't'){
-							if (0 < multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
-								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
 							}
 							else{
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
 							}
 						}
-						else if(assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't'){
+							if (multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+							}
+							else{
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+							}
+						}
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
+							if (multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1].substr(2))] < 0){
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+							}
+							else{
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+							}
+						}
+					}
+					else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[1] == "$zero"){
+						if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 's'){
+							if (0 < multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+							}
+							else{
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+							}
+						}
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2][1] == 't'){
+							if (0 < multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2].substr(2))]){
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+							}
+							else{
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								}
+							}
+						}
+						else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[2] == "$zero"){
 							if (0 < 0){
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 1;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
 							}
 							else{
-								if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
-									multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 's'){
+									multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $s" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].s_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
-								else if(assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
-									multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
-									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
+								else if(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0][1] == 't'){
+									multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] = 0;
+									cout << "clock cycle " << multi_reg[core_no].cpi << "; " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].whole_line << "; $t" << stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2)) << "=" << multi_reg[core_no].t_registers[stol(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0].substr(2))] << endl;
 								}
 							}
 						}
@@ -1790,7 +1829,7 @@ int main(int argc, char **argv)
 
 
 
-				else if (assembly_program_storage[multi_reg[core_no].PC].instruction == "j")
+				else if (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction == "j")
 				{
 					if (grant == time_taken_for_the_printing_of_queue())
 					{
@@ -1818,19 +1857,19 @@ int main(int argc, char **argv)
 						grant++;
 					}
 					multi_reg[core_no].cpi++;
-					cout << "clock cycle " << multi_reg[core_no].cpi << ", jumping to the label " << (assembly_program_storage[multi_reg[core_no].PC].arguements[0]) << endl;
-					multi_reg[core_no].PC = label_map[assembly_program_storage[multi_reg[core_no].PC].arguements[0] + ":"];
+					cout << "clock cycle " << multi_reg[core_no].cpi << ", jumping to the label " << (multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0]) << endl;
+					multi_reg[core_no].PC = label_map[multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements[0] + ":"];
 				}
 
-				else if (label_map.find(assembly_program_storage[multi_reg[core_no].PC].instruction) != label_map.end())
+				else if (label_map.find(multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction) != label_map.end())
 				{
 					multi_reg[core_no].PC++;
 				}
 
 				else
 				{
-					cout << "Invalid instruction : " << assembly_program_storage[multi_reg[core_no].PC].instruction;
-					for (string a : assembly_program_storage[multi_reg[core_no].PC].arguements)
+					cout << "Invalid instruction : " << multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].instruction;
+					for (string a : multi_reg[core_no].assembly_program_storage[multi_reg[core_no].PC].arguements)
 					{
 						cout << " " << a << " ";
 					}
@@ -1880,23 +1919,23 @@ int main(int argc, char **argv)
 		}
 	}
 
-	for(int i=0;i<NUM_CORES;i++){
+	for(int cn=0;cn<NUM_CORES;cn++){
 		cout <<endl;
 		cout<<"final s register values-"<<endl;
-		for(int i=0;i<multi_reg[i].s_registers.size();i++){
+		for(int i=0;i<multi_reg[cn].s_registers.size();i++){
 			cout<<"register $s"<<i<<" : hex=";
-			cout<<hex<<multi_reg[i].s_registers[i];
+			cout<<hex<<multi_reg[cn].s_registers[i];
 			cout<<", int=";
-			cout<<dec<<multi_reg[i].s_registers[i]<<endl;
+			cout<<dec<<multi_reg[cn].s_registers[i]<<endl;
 		}
 
 		cout <<endl;
 		cout<<"final t register values-"<<endl;
-		for(int i=0;i<multi_reg[i].t_registers.size();i++){
+		for(int i=0;i<multi_reg[cn].t_registers.size();i++){
 			cout<<"register $t"<<i<<" : hex=";
-			cout<<hex<<multi_reg[i].t_registers[i];
+			cout<<hex<<multi_reg[cn].t_registers[i];
 			cout<<", int=";
-			cout<<dec<<multi_reg[i].t_registers[i]<<endl;
+			cout<<dec<<multi_reg[cn].t_registers[i]<<endl;
 		}
 	}	
 

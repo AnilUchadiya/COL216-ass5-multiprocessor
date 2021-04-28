@@ -1,0 +1,25 @@
+main:
+	addi $s0, $zero, 0
+	addi $s1, $zero, 0
+	addi $t6, $zero, 13
+	sw $t6, 1012($s0)
+	sw $t6, 1668($s0)
+	sw $t6, 1008($s0)
+	sw $t6, 2016($s0)
+	sw $t9, 1012($s0)
+	lw $t7, 1012($s0)
+	lw $t7, 2012($s0)
+	lw $t7, 1012($s0)
+	lw $t8, 2012($s0)
+	lw $t6, 1012($s0)
+	lw $t6, 5000($s0)
+	sw $t6, 1004($s0)
+	addi $s2, $zero, 10
+	addi $t1, $zero, 0
+	add $t6 , $t1, $s2
+	j lol
+	addi $t3, $zero , 12
+lol:
+	addi $s1, $zero, 0
+	addi $s2, $zero, 10
+exit:
